@@ -3,121 +3,167 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>E-Izin: Sistem Persetujuan Terpadu</title>
+    <title>E-Izin: Sistem Persetujuan + PDF</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
         :root { --primary: #2563eb; --success: #22c55e; --bg: #f8fafc; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg); color: #334155; padding: 20px; }
-        .container { max-width: 500px; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); margin: auto; }
-        h2 { text-align: center; color: var(--primary); margin-bottom: 20px; }
+        body { font-family: 'Segoe UI', sans-serif; background-color: var(--bg); padding: 20px; color: #334155; }
+        .container { max-width: 500px; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 10px 15px rgba(0,0,0,0.1); margin: auto; }
+        h2 { text-align: center; color: var(--primary); }
         .section { background: #f1f5f9; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid var(--primary); }
         label { display: block; margin: 10px 0 5px; font-weight: 600; font-size: 14px; }
-        input, select, textarea { width: 100%; padding: 12px; margin-bottom: 10px; border: 1px solid #cbd5e1; border-radius: 8px; box-sizing: border-box; font-size: 14px; }
-        .btn { width: 100%; padding: 14px; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; font-weight: bold; transition: 0.3s; margin-top: 10px; }
+        input, select, textarea { width: 100%; padding: 12px; margin-bottom: 10px; border: 1px solid #cbd5e1; border-radius: 8px; box-sizing: border-box; }
+        .btn { width: 100%; padding: 14px; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; font-weight: bold; margin-top: 10px; }
         .btn-request { background-color: var(--primary); color: white; }
         .btn-approve { background-color: var(--success); color: white; }
+        .loading { display: none; text-align: center; font-size: 14px; margin-top: 10px; }
         .hidden { display: none; }
-        .badge { display: inline-block; padding: 4px 10px; background: #dcfce7; color: #166534; border-radius: 20px; font-size: 12px; margin-bottom: 10px; }
     </style>
 </head>
 <body>
 
 <div class="container">
     <div id="formSiswa">
-        <h2>📝 Pengajuan Izin Siswa</h2>
+        <h2>📝 Pengajuan Izin</h2>
         <div class="section">
-            <label>Tujuan Persetujuan (Waka/BK)</label>
-            <input type="number" id="noPersetujuan" placeholder="628123xxx (No WA Waka/BK)">
-            
-            <label>Tujuan Akhir (Wali Kelas)</label>
-            <input type="number" id="noWali" placeholder="628123xxx (No WA Wali Kelas)">
+            <label>WA Waka Kesiswaan/BK</label>
+            <input type="number" id="noPersetujuan" placeholder="628123xxx">
+            <label>WA Wali Kelas</label>
+            <input type="number" id="noWali" placeholder="628123xxx">
         </div>
 
-        <label>Nama Lengkap Siswa</label>
-        <input type="text" id="nama" placeholder="Nama Siswa">
-
+        <label>Nama Siswa</label>
+        <input type="text" id="nama" placeholder="Nama Lengkap">
         <label>Kelas</label>
-        <input type="text" id="kelas" placeholder="Contoh: XII RPL 1">
-
+        <input type="text" id="kelas" placeholder="Contoh: XII MIPA 2">
         <label>Alasan</label>
         <select id="alasan">
             <option value="Sakit">Sakit</option>
-            <option value="Keluarga">Urusan Keluarga</option>
-            <option value="Dispensasi">Dispensasi Kegiatan</option>
+            <option value="Urusan Keluarga">Urusan Keluarga</option>
+            <option value="Dispensasi">Dispensasi</option>
         </select>
-
-        <label>Detail Keterangan</label>
-        <textarea id="ket" rows="3" placeholder="Jelaskan secara singkat..."></textarea>
-
-        <button class="btn btn-request" onclick="ajukanIzin()">Kirim ke Waka/BK untuk Approve</button>
+        <label>Bukti Foto</label>
+        <input type="file" id="fotoBukti" accept="image/*">
+        
+        <div id="loader" class="loading">⏳ Mengupload & Menyiapkan Data...</div>
+        <button id="btnKirim" class="btn btn-request" onclick="prosesIzin()">Kirim ke Waka/BK</button>
     </div>
 
     <div id="formApproval" class="hidden">
-        <span class="badge">Mode Review Waka/BK</span>
-        <h2 style="color: #22c55e;">✅ Persetujuan Izin</h2>
-        <div id="reviewData" class="section">
-            </div>
-        <button class="btn btn-approve" onclick="approveAndSend()">Approve & Teruskan ke Wali Kelas</button>
+        <h2 style="color: var(--success);">✅ Verifikasi Izin</h2>
+        <div id="reviewData" class="section"></div>
+        <p style="font-size: 12px; color: red;">*Klik tombol di bawah akan mendownload PDF dan membuka WhatsApp Wali Kelas.</p>
+        <button class="btn btn-approve" onclick="generatePDFAndSend()">Setujui & Buat PDF</button>
     </div>
 </div>
 
 <script>
-    // Ambil data dari URL jika ada (untuk Guru BK/Waka)
+    const { jsPDF } = window.jspdf;
     const urlParams = new URLSearchParams(window.location.search);
+
+    // Fungsi Upload & Kirim ke Waka
+    async function prosesIzin() {
+        const fileInput = document.getElementById('fotoBukti');
+        if (!fileInput.files[0]) return alert("Mohon upload foto bukti!");
+
+        document.getElementById('loader').style.display = 'block';
+        document.getElementById('btnKirim').disabled = true;
+
+        const formData = new FormData();
+        formData.append("image", fileInput.files[0]);
+
+        try {
+            // Upload ke ImgBB
+            const resp = await fetch("https://api.imgbb.com/1/upload?key=676722d7d8f583842c543f4439c36294", {
+                method: "POST", body: formData
+            });
+            const res = await resp.json();
+            const imgUrl = res.data.url;
+
+            const data = {
+                nama: document.getElementById('nama').value,
+                kelas: document.getElementById('kelas').value,
+                alasan: document.getElementById('alasan').value,
+                noWali: document.getElementById('noWali').value,
+                img: imgUrl
+            };
+
+            const currentUrl = window.location.href.split('?')[0];
+            const linkApprove = `${currentUrl}?nama=${encodeURIComponent(data.nama)}&kelas=${encodeURIComponent(data.kelas)}&alasan=${encodeURIComponent(data.alasan)}&img=${encodeURIComponent(data.img)}&target=${data.noWali}`;
+
+            const pesan = `*PENGAJUAN IZIN SISWA*%0A%0A` +
+                          `Nama: *${data.nama}*%0A` +
+                          `Kelas: *${data.kelas}*%0A` +
+                          `Alasan: *${data.alasan}*%0A%0A` +
+                          `Mohon Verifikasi di link berikut:%0A${encodeURIComponent(linkApprove)}`;
+
+            window.open(`https://wa.me/${document.getElementById('noPersetujuan').value}?text=${pesan}`, '_blank');
+        } catch (e) { alert("Gagal!"); }
+        finally { document.getElementById('loader').style.display = 'none'; }
+    }
+
+    // Tampilan Review Guru
     if (urlParams.has('nama')) {
         document.getElementById('formSiswa').classList.add('hidden');
         document.getElementById('formApproval').classList.remove('hidden');
-        
         document.getElementById('reviewData').innerHTML = `
             <p><strong>Nama:</strong> ${urlParams.get('nama')}</p>
             <p><strong>Kelas:</strong> ${urlParams.get('kelas')}</p>
             <p><strong>Alasan:</strong> ${urlParams.get('alasan')}</p>
-            <p><strong>Ket:</strong> ${urlParams.get('ket')}</p>
+            <p><strong>Bukti:</strong> <a href="${urlParams.get('img')}" target="_blank">Lihat Foto</a></p>
         `;
     }
 
-    function ajukanIzin() {
-        const data = {
-            noPers: document.getElementById('noPersetujuan').value,
-            noWali: document.getElementById('noWali').value,
-            nama: document.getElementById('nama').value,
-            kelas: document.getElementById('kelas').value,
-            alasan: document.getElementById('alasan').value,
-            ket: document.getElementById('ket').value
-        };
-
-        if(!data.noPers || !data.nama) return alert("Mohon lengkapi data!");
-
-        // Buat Link Approval untuk Waka/BK
-        const currentUrl = window.location.href.split('?')[0];
-        const linkApprove = `${currentUrl}?nama=${encodeURIComponent(data.nama)}&kelas=${encodeURIComponent(data.kelas)}&alasan=${encodeURIComponent(data.alasan)}&ket=${encodeURIComponent(data.ket)}&target=${data.noWali}`;
-
-        const pesan = `*PENGAJUAN IZIN SISWA*%0A%0A` +
-                      `Halo Bapak/Ibu Waka Kesiswaan/BK, saya memohon izin untuk:%0A` +
-                      `Nama: *${data.nama}*%0A` +
-                      `Kelas: *${data.kelas}*%0A%0A` +
-                      `Mohon kesediaan Bapak/Ibu untuk meninjau dan menyetujui melalui link di bawah ini:%0A` +
-                      `${encodeURIComponent(linkApprove)}`;
-
-        window.open(`https://wa.me/${data.noPers}?text=${pesan}`, '_blank');
-    }
-
-    function approveAndSend() {
+    // Fungsi Generate PDF & Kirim ke Wali Kelas
+    function generatePDFAndSend() {
+        const doc = new jsPDF();
         const nama = urlParams.get('nama');
         const kelas = urlParams.get('kelas');
         const alasan = urlParams.get('alasan');
-        const ket = urlParams.get('ket');
-        const targetWali = urlParams.get('target');
-        const tgl = new Date().toLocaleDateString('id-ID');
+        const imgUrl = urlParams.get('img');
+        const tgl = new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
-        const pesanFinal = `*SURAT IZIN ONLINE (TERVERIFIKASI)*%0A%0A` +
-                           `Yth. Wali Kelas ${kelas},%0A` +
-                           `Menerangkan bahwa siswa berikut telah mendapatkan *PERSETUJUAN* dari pihak Kesiswaan/BK:%0A%0A` +
+        // Header PDF
+        doc.setFontSize(18);
+        doc.text("SURAT IZIN TIDAK MASUK SEKOLAH", 105, 20, { align: "center" });
+        doc.setFontSize(12);
+        doc.text("Terverifikasi Sistem E-Izin Digital", 105, 28, { align: "center" });
+        doc.line(20, 35, 190, 35);
+
+        // Isi PDF
+        doc.setFontSize(12);
+        doc.text(`Pada hari ini: ${tgl}`, 20, 45);
+        doc.text("Menerangkan bahwa siswa di bawah ini:", 20, 55);
+        
+        doc.setFont(undefined, 'bold');
+        doc.text(`Nama    : ${nama}`, 20, 65);
+        doc.text(`Kelas   : ${kelas}`, 20, 72);
+        doc.text(`Alasan  : ${alasan}`, 20, 79);
+        
+        doc.setFont(undefined, 'normal');
+        doc.text("Telah memberikan bukti yang sah dan disetujui oleh pihak", 20, 90);
+        doc.text("Waka Kesiswaan/Guru BK untuk tidak mengikuti KBM.", 20, 97);
+
+        doc.text("Link Bukti Foto:", 20, 110);
+        doc.setTextColor(0, 0, 255);
+        doc.text(imgUrl, 20, 117);
+
+        // Footer / Stamp
+        doc.setTextColor(0, 128, 0);
+        doc.setFontSize(14);
+        doc.text("STATUS: DISETUJUI / VALID", 105, 140, { align: "center" });
+
+        // Simpan PDF
+        const fileName = `Izin_${nama}_${kelas}.pdf`;
+        doc.save(fileName);
+
+        // Kirim Pesan ke Wali Kelas
+        const targetWali = urlParams.get('target');
+        const pesanFinal = `*SURAT IZIN ONLINE (PDF TERLAMPIR)*%0A%0A` +
+                           `Yth. Wali Kelas, berikut adalah surat izin yang telah disetujui untuk:%0A` +
                            `Nama: *${nama}*%0A` +
-                           `Alasan: *${alasan}*%0A` +
-                           `Keterangan: ${ket}%0A` +
-                           `Tanggal: ${tgl}%0A%0A` +
-                           `Status: ✅ *DISETUJUI OLEH WAKA KESISWAAN/BK*%0A%0A` +
-                           `Demikian agar dapat dimaklumi. Terima kasih.`;
+                           `Kelas: *${kelas}*%0A%0A` +
+                           `*Mohon cek file PDF yang saya lampirkan.* Terimakasih.`;
 
         window.open(`https://wa.me/${targetWali}?text=${pesanFinal}`, '_blank');
     }

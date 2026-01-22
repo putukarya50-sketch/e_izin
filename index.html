@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>E-Izin: Sistem Persetujuan Terpadu</title>
+    <style>
+        :root { --primary: #2563eb; --success: #22c55e; --bg: #f8fafc; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg); color: #334155; padding: 20px; }
+        .container { max-width: 500px; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); margin: auto; }
+        h2 { text-align: center; color: var(--primary); margin-bottom: 20px; }
+        .section { background: #f1f5f9; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid var(--primary); }
+        label { display: block; margin: 10px 0 5px; font-weight: 600; font-size: 14px; }
+        input, select, textarea { width: 100%; padding: 12px; margin-bottom: 10px; border: 1px solid #cbd5e1; border-radius: 8px; box-sizing: border-box; font-size: 14px; }
+        .btn { width: 100%; padding: 14px; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; font-weight: bold; transition: 0.3s; margin-top: 10px; }
+        .btn-request { background-color: var(--primary); color: white; }
+        .btn-approve { background-color: var(--success); color: white; }
+        .hidden { display: none; }
+        .badge { display: inline-block; padding: 4px 10px; background: #dcfce7; color: #166534; border-radius: 20px; font-size: 12px; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="formSiswa">
+        <h2>📝 Pengajuan Izin Siswa</h2>
+        <div class="section">
+            <label>Tujuan Persetujuan (Waka/BK)</label>
+            <input type="number" id="noPersetujuan" placeholder="628123xxx (No WA Waka/BK)">
+            
+            <label>Tujuan Akhir (Wali Kelas)</label>
+            <input type="number" id="noWali" placeholder="628123xxx (No WA Wali Kelas)">
+        </div>
+
+        <label>Nama Lengkap Siswa</label>
+        <input type="text" id="nama" placeholder="Nama Siswa">
+
+        <label>Kelas</label>
+        <input type="text" id="kelas" placeholder="Contoh: XII RPL 1">
+
+        <label>Alasan</label>
+        <select id="alasan">
+            <option value="Sakit">Sakit</option>
+            <option value="Keluarga">Urusan Keluarga</option>
+            <option value="Dispensasi">Dispensasi Kegiatan</option>
+        </select>
+
+        <label>Detail Keterangan</label>
+        <textarea id="ket" rows="3" placeholder="Jelaskan secara singkat..."></textarea>
+
+        <button class="btn btn-request" onclick="ajukanIzin()">Kirim ke Waka/BK untuk Approve</button>
+    </div>
+
+    <div id="formApproval" class="hidden">
+        <span class="badge">Mode Review Waka/BK</span>
+        <h2 style="color: #22c55e;">✅ Persetujuan Izin</h2>
+        <div id="reviewData" class="section">
+            </div>
+        <button class="btn btn-approve" onclick="approveAndSend()">Approve & Teruskan ke Wali Kelas</button>
+    </div>
+</div>
+
+<script>
+    // Ambil data dari URL jika ada (untuk Guru BK/Waka)
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('nama')) {
+        document.getElementById('formSiswa').classList.add('hidden');
+        document.getElementById('formApproval').classList.remove('hidden');
+        
+        document.getElementById('reviewData').innerHTML = `
+            <p><strong>Nama:</strong> ${urlParams.get('nama')}</p>
+            <p><strong>Kelas:</strong> ${urlParams.get('kelas')}</p>
+            <p><strong>Alasan:</strong> ${urlParams.get('alasan')}</p>
+            <p><strong>Ket:</strong> ${urlParams.get('ket')}</p>
+        `;
+    }
+
+    function ajukanIzin() {
+        const data = {
+            noPers: document.getElementById('noPersetujuan').value,
+            noWali: document.getElementById('noWali').value,
+            nama: document.getElementById('nama').value,
+            kelas: document.getElementById('kelas').value,
+            alasan: document.getElementById('alasan').value,
+            ket: document.getElementById('ket').value
+        };
+
+        if(!data.noPers || !data.nama) return alert("Mohon lengkapi data!");
+
+        // Buat Link Approval untuk Waka/BK
+        const currentUrl = window.location.href.split('?')[0];
+        const linkApprove = `${currentUrl}?nama=${encodeURIComponent(data.nama)}&kelas=${encodeURIComponent(data.kelas)}&alasan=${encodeURIComponent(data.alasan)}&ket=${encodeURIComponent(data.ket)}&target=${data.noWali}`;
+
+        const pesan = `*PENGAJUAN IZIN SISWA*%0A%0A` +
+                      `Halo Bapak/Ibu Waka Kesiswaan/BK, saya memohon izin untuk:%0A` +
+                      `Nama: *${data.nama}*%0A` +
+                      `Kelas: *${data.kelas}*%0A%0A` +
+                      `Mohon kesediaan Bapak/Ibu untuk meninjau dan menyetujui melalui link di bawah ini:%0A` +
+                      `${encodeURIComponent(linkApprove)}`;
+
+        window.open(`https://wa.me/${data.noPers}?text=${pesan}`, '_blank');
+    }
+
+    function approveAndSend() {
+        const nama = urlParams.get('nama');
+        const kelas = urlParams.get('kelas');
+        const alasan = urlParams.get('alasan');
+        const ket = urlParams.get('ket');
+        const targetWali = urlParams.get('target');
+        const tgl = new Date().toLocaleDateString('id-ID');
+
+        const pesanFinal = `*SURAT IZIN ONLINE (TERVERIFIKASI)*%0A%0A` +
+                           `Yth. Wali Kelas ${kelas},%0A` +
+                           `Menerangkan bahwa siswa berikut telah mendapatkan *PERSETUJUAN* dari pihak Kesiswaan/BK:%0A%0A` +
+                           `Nama: *${nama}*%0A` +
+                           `Alasan: *${alasan}*%0A` +
+                           `Keterangan: ${ket}%0A` +
+                           `Tanggal: ${tgl}%0A%0A` +
+                           `Status: ✅ *DISETUJUI OLEH WAKA KESISWAAN/BK*%0A%0A` +
+                           `Demikian agar dapat dimaklumi. Terima kasih.`;
+
+        window.open(`https://wa.me/${targetWali}?text=${pesanFinal}`, '_blank');
+    }
+</script>
+
+</body>
+</html>
